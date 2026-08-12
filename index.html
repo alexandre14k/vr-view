@@ -1,1 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <title>VR-View</title>
+  <link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <section id="stereo-view" aria-hidden="false">
+      <div class="eye" id="eye-left">
+        <canvas id="canvas-left"></canvas>
+        <svg class="lens-overlay" aria-hidden="true">
+          <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#333333" stroke-width="4" />
+        </svg>
+      </div>
+      <div class="eye" id="eye-right">
+        <canvas id="canvas-right"></canvas>
+        <svg class="lens-overlay" aria-hidden="true">
+          <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#333333" stroke-width="4" />
+        </svg>
+      </div>
+    </section>
 
+    <button id="fullscreen-btn" type="button" aria-label="Toggle fullscreen"></button>
+
+    <button id="camera-btn" type="button" aria-label="Toggle camera" class="is-on"></button>
+
+    <section id="rotate-message" aria-hidden="true">
+      <div class="viewfinder">
+        <span class="corner corner-tl"></span>
+        <span class="corner corner-tr"></span>
+        <span class="corner corner-bl"></span>
+        <span class="corner corner-br"></span>
+        <p class="eyebrow">Viewer standby</p>
+        <h1>Rotate to landscape</h1>
+        <p class="sub">Requires landscape orientation and a screen width above 750px.</p>
+      </div>
+    </section>
+  </div>
+  <script type="module" src="src/index.js"></script>
+</body>
+</html>

@@ -1,1 +1,189 @@
+:root {
+  --stage: #000000;
+  --ink: #f5f5f5;
+  --muted: #6b6b6b;
+  --accent: #ff2e2e;
+  --cam-accent: #00aaff;
+  --mono: ui-monospace, "SF Mono", "Roboto Mono", "JetBrains Mono", Menlo,
+    Consolas, monospace;
+}
 
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background: var(--stage);
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: var(--stage);
+}
+
+#stereo-view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: space-between;
+  background: var(--stage);
+  width: 100%;
+  height: 100%;
+}
+
+.eye {
+  position: relative;
+  flex: 1 1 50%;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.eye canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: black;
+}
+
+.lens-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  fill: none;
+  stroke: #333333;
+  stroke-width: 4;
+  transition: stroke-opacity 0.2s ease;
+}
+
+.eye.camera-active .lens-overlay {
+  stroke-opacity: 0;
+}
+
+#fullscreen-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  background: #000000;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 20;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#fullscreen-btn.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+#camera-btn {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  background: var(--cam-accent);
+  border: 1px solid var(--cam-accent);
+  border-radius: 50%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 20;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#camera-btn:not(.is-on) {
+  background: #000000;
+  border: 1px solid var(--cam-accent);
+}
+
+#rotate-message {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--stage);
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.viewfinder {
+  position: relative;
+  padding: 40px 56px;
+  text-align: center;
+  max-width: 420px;
+}
+
+.viewfinder .corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--accent);
+}
+
+.corner-tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+.corner-tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+.corner-bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+.corner-br { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+#rotate-message h1 {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin-bottom: 12px;
+}
+
+#rotate-message .sub {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+@media (orientation: landscape) and (min-width: 751px) {
+  #stereo-view {
+    display: flex;
+  }
+  #rotate-message {
+    display: none;
+  }
+}
