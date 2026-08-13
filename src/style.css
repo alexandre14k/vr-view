@@ -127,6 +127,22 @@ body {
   border: 1px solid var(--cam-accent);
 }
 
+#fps-counter {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+  background: #000000;
+  padding: 2px 8px;
+  pointer-events: none;
+  user-select: none;
+}
+
 #rotate-message {
   position: absolute;
   inset: 0;
@@ -179,7 +195,7 @@ body {
   color: var(--muted);
 }
 
-@media (orientation: landscape) and (min-width: 751px) {
+@media (orientation: landscape) and (min-width: 568px) {
   #stereo-view {
     display: flex;
   }

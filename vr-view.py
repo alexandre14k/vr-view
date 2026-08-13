@@ -11,6 +11,9 @@ class Handler(root_http_server.BaseHTTPRequestHandler):
         elif self.path == '/src/index.js':
             self.serve_file(
                 'src/index.js', 'application/javascript')
+        elif self.path == '/src/worker.js':
+            self.serve_file(
+                'src/worker.js', 'application/javascript')
         elif self.path == '/src/style.css':
             self.serve_file('src/style.css', 'text/css')
         else:

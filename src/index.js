@@ -1,20 +1,43 @@
+const WORKER_URL = new URL('worker.js', import.meta.url).href;
+
 class StereoCanvas {
-  constructor(canvasEl) {
+  constructor(canvasEl, onRender) {
     this.canvas = canvasEl;
     this.ctx = canvasEl.getContext('2d');
     this._color = '#ffffff';
     this._source = null;
+    this.distortionScale = 0.5;
 
-    this._tempCanvas = document.createElement('canvas');
-    this._tempCtx = this._tempCanvas.getContext('2d');
+    this._workerSupported = typeof Worker !== 'undefined'
+      && typeof OffscreenCanvas !== 'undefined'
+      && typeof createImageBitmap !== 'undefined';
+
+    if (this._workerSupported) {
+      this._worker = new Worker(WORKER_URL);
+      this._worker.onmessage = (e) => this._handleWorkerMessage(e.data);
+      this._worker.onerror = (err) => {
+        console.error('[stereo-view] worker failed — falling back to an undistorted feed:', err.message || err);
+        this._workerSupported = false;
+        this._failAllPending(new Error('worker unavailable'));
+      };
+      this._pending = new Map();
+      this._nextRequestId = 0;
+    } else {
+      console.warn('[stereo-view] Worker/OffscreenCanvas unsupported — falling back to an undistorted feed.');
+    }
+
+    this._busy = false;
+    this._onRender = onRender || null;
 
     this._resizeObserver = new ResizeObserver(
       () => this._resize()
     );
     this._resizeObserver.observe(canvasEl);
     this._resize();
+  }
 
-    this.distortionScale = 0.5;
+  _notifyRender() {
+    if (this._onRender) this._onRender();
   }
 
   _resize() {
@@ -25,10 +48,6 @@ class StereoCanvas {
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
-
-      this._tempCanvas.width = w;
-      this._tempCanvas.height = h;
-
       this.redraw();
     }
   }
@@ -59,7 +78,8 @@ class StereoCanvas {
 
   redraw() {
     if (this._source) {
-      this._drawFrame(this._source);
+      this._drawFrame(this._source).catch(err =>
+        console.error('[stereo-view] redraw failed:', err));
     } else if (this._color) {
       this._fillSolid(this._color);
     }
@@ -75,19 +95,83 @@ class StereoCanvas {
     this.ctx.restore();
   }
 
-  applyConvexDistortion(source, distortionStrength = null) {
+  async applyConvexDistortion(source, distortionStrength = null) {
     const cw = this.canvas.width;
     const ch = this.canvas.height;
-    if (cw === 0 || ch === 0) return this._tempCtx.createImageData(cw, ch);
-
-    const k = distortionStrength ?? this.distortionScale;
+    if (cw === 0 || ch === 0 || !this._workerSupported) return null;
 
     const sw = source.videoWidth || source.naturalWidth || source.width;
     const sh = source.videoHeight || source.naturalHeight || source.height;
+    if (!sw || !sh) return null;
 
-    if (!sw || !sh) {
-      return this._tempCtx.createImageData(cw, ch);
+    const k = distortionStrength ?? this.distortionScale;
+    const bitmap = await createImageBitmap(source);
+    const { bitmap: resultBitmap } = await this._requestDistortion(bitmap, cw, ch, k);
+    return resultBitmap;
+  }
+
+  _requestDistortion(bitmap, cw, ch, k) {
+    return new Promise((resolve, reject) => {
+      const id = this._nextRequestId++;
+      this._pending.set(id, { resolve, reject });
+      this._worker.postMessage({ id, cw, ch, k, bitmap }, [bitmap]);
+    });
+  }
+
+  _handleWorkerMessage(msg) {
+    const pending = this._pending.get(msg.id);
+    if (!pending) return;
+    this._pending.delete(msg.id);
+    if (msg.error) pending.reject(new Error(msg.error));
+    else pending.resolve(msg);
+  }
+
+  _failAllPending(err) {
+    for (const { reject } of this._pending.values()) reject(err);
+    this._pending.clear();
+  }
+
+  async _drawFrame(source) {
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    if (cw === 0 || ch === 0) return;
+
+    if (!this._workerSupported) {
+      this._drawUndistortedFallback(source);
+      return;
     }
+
+    if (this._busy) return;
+    this._busy = true;
+    try {
+      const resultBitmap = await this.applyConvexDistortion(source);
+      if (!resultBitmap) return;
+
+      if (resultBitmap.width !== this.canvas.width || resultBitmap.height !== this.canvas.height) {
+        resultBitmap.close();
+        this._notifyRender();
+        return;
+      }
+
+      this.ctx.save();
+      this._applyLensClip();
+      this.ctx.drawImage(resultBitmap, 0, 0);
+      this.ctx.restore();
+      resultBitmap.close();
+      this._notifyRender();
+    } catch (err) {
+      console.error('[stereo-view] distortion failed:', err);
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  _drawUndistortedFallback(source) {
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    const sw = source.videoWidth || source.naturalWidth || source.width;
+    const sh = source.videoHeight || source.naturalHeight || source.height;
+    if (!sw || !sh) return;
 
     const scale = Math.max(cw / sw, ch / sh);
     const dw = sw * scale;
@@ -95,73 +179,59 @@ class StereoCanvas {
     const dx = (cw - dw) / 2;
     const dy = (ch - dh) / 2;
 
-    this._tempCtx.clearRect(0, 0, cw, ch);
-    this._tempCtx.drawImage(source, dx, dy, dw, dh);
-
-    const srcData = this._tempCtx.getImageData(0, 0, cw, ch);
-    const srcPixels = srcData.data;
-
-    const output = this._tempCtx.createImageData(cw, ch);
-    const dstPixels = output.data;
-
-    const halfW = cw / 2;
-    const halfH = ch / 2;
-    const invHalfW = 1.0 / halfW;
-    const invHalfH = 1.0 / halfH;
-
-    for (let y = 0; y < ch; y++) {
-      for (let x = 0; x < cw; x++) {
-
-        const nx = (x - halfW) * invHalfW;
-        const ny = (y - halfH) * invHalfH;
-
-        const rSq = nx * nx + ny * ny;
-
-        const factor = 1.0 + k * rSq;
-
-        const sx = nx / factor * halfW + halfW;
-        const sy = ny / factor * halfH + halfH;
-
-        const six = Math.floor(sx);
-        const siy = Math.floor(sy);
-
-        if (six >= 0 && six < cw && siy >= 0 && siy < ch) {
-          const si = (siy * cw + six) * 4;
-          const di = (y * cw + x) * 4;
-          dstPixels[di]     = srcPixels[si];     // R
-          dstPixels[di + 1] = srcPixels[si + 1]; // G
-          dstPixels[di + 2] = srcPixels[si + 2]; // B
-          dstPixels[di + 3] = srcPixels[si + 3]; // Alpha
-        } else {
-          const di = (y * cw + x) * 4;
-          dstPixels[di] = 0;
-          dstPixels[di + 1] = 0;
-          dstPixels[di + 2] = 0;
-          dstPixels[di + 3] = 255;
-        }
-      }
-    }
-
-    this._tempCtx.putImageData(output, 0, 0);
-
-    return output;
-  }
-
-  _drawFrame(source) {
-    const distortedData = this.applyConvexDistortion(source);
-
-    this._tempCtx.putImageData(distortedData, 0, 0);
-
     this.ctx.save();
     this._applyLensClip();
-    this.ctx.drawImage(this._tempCanvas, 0, 0);
+    this.ctx.drawImage(source, dx, dy, dw, dh);
     this.ctx.restore();
+  }
+
+  blit(bitmap) {
+    if (bitmap.width !== this.canvas.width ||
+        bitmap.height !== this.canvas.height) return;
+    this.ctx.save();
+    this._applyLensClip();
+    this.ctx.drawImage(bitmap, 0, 0);
+    this.ctx.restore();
+  }
+
+  destroy() {
+    if (this._worker) this._worker.terminate();
+    if (this._resizeObserver) this._resizeObserver.disconnect();
+  }
+}
+
+class FpsMeter {
+  constructor() {
+    this._frames = 0;
+    this._lastTime = performance.now();
+    this._value = 0;
+  }
+
+  tick() {
+    this._frames++;
+    const now = performance.now();
+    const elapsed = now - this._lastTime;
+    if (elapsed >= 500) {
+      this._value = (this._frames * 1000) / elapsed;
+      this._frames = 0;
+      this._lastTime = now;
+    }
+  }
+
+  get value() {
+    return this._value;
   }
 }
 
 class StereoViewController {
-  constructor(leftCanvasEl, rightCanvasEl, cameraBtn) {
-    this.left = new StereoCanvas(leftCanvasEl);
+  constructor(leftCanvasEl, rightCanvasEl, cameraBtn, fpsEl) {
+    this._fpsRender = new FpsMeter();
+    this._fpsLoop = new FpsMeter();
+    this._fpsEl = fpsEl;
+
+    this.left = new StereoCanvas(
+      leftCanvasEl, () => this._onRenderTick()
+    );
     this.right = new StereoCanvas(rightCanvasEl);
     this.synced = true;
     this.enabled = false;
@@ -176,6 +246,18 @@ class StereoViewController {
     this._rightEye = rightCanvasEl.closest('.eye');
 
     this._updateCameraButton(true);
+  }
+
+  _onRenderTick() {
+    this._fpsRender.tick();
+    this._refreshFps();
+  }
+
+  _refreshFps() {
+    if (!this._fpsEl) return;
+    const r = this._fpsRender.value.toFixed(0);
+    const l = this._fpsLoop.value.toFixed(0);
+    this._fpsEl.textContent = `${r} / ${l} fps`;
   }
 
   async startCamera() {
@@ -251,9 +333,32 @@ class StereoViewController {
 
   _tick() {
     if (!this.enabled) return;
+    this._fpsLoop.tick();
+    this._refreshFps();
     this.left.drawFrame(this._video);
     if (this.synced) this.right.drawFrame(this._video);
     this._rafId = requestAnimationFrame(() => this._tick());
+  }
+
+  async _tickSynced() {
+    if (this._syncBusy) return;
+    if (!this.left._workerSupported) {
+      this.left.drawFrame(this._video);
+      this.right.drawFrame(this._video);
+      return;
+    }
+    this._syncBusy = true;
+    try {
+      const bitmap = await this.left.applyConvexDistortion(this._video);
+      if (!bitmap) return;
+      this.left.blit(bitmap);
+      this.right.blit(bitmap);
+      bitmap.close();
+    } catch (err) {
+      console.error('[stereo-view] synced draw failed:', err);
+    } finally {
+      this._syncBusy = false;
+    }
   }
 }
 
@@ -325,9 +430,10 @@ function init() {
   const rightCanvas = document.getElementById('canvas-right');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
   const cameraBtn = document.getElementById('camera-btn');
+  const fpsEl = document.getElementById('fps-counter');
 
   const controller = new StereoViewController(
-    leftCanvas, rightCanvas, cameraBtn
+    leftCanvas, rightCanvas, cameraBtn, fpsEl
   );
 
   controller.startCamera();
