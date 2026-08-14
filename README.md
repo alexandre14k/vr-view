@@ -1,9 +1,25 @@
 # vr-view
 Static webpage with virtual reality view for stereoscopic exploration. <br>
-Browse the internet with Google CardBoard, your phone and your favourite web browser.
+Browse the internet with Google CardBoard, your phone and your favourite web browser.<br><br>
+Supported usage with affordable 3D VR Smartphone Headsets (example below) : <br><a href="https://www.conrad.fr/fr/p/vr-shinecon-g07e-01-casque-de-realite-virtuelle-noir-gris-3368477.html">https://www.conrad.fr/fr/p/vr-shinecon-g07e-01-casque-de-realite-virtuelle-noir-gris-3368477.html</a>.
 
+## Test default mode
 <div style="text-align: center;">
-  <img src="doc/use-webcam.png" width="650" />
+  <img src="doc/usage.png" width="650" />
+</div>
+
+## Test fps with distorsion
+- webcam selected with covered view
+- improvement from 6 / 60 to 23 / 60 fps
+<div style="text-align: center;">
+  <img src="doc/test-distort.png" width="650" />
+</div>
+
+## Test fps without distorsion
+- webcam selected with covered view
+- no distorsion means optimal fps
+<div style="text-align: center;">
+  <img src="doc/test-distort-off.png" width="650" />
 </div>
 
 ## Hosted on GitHub Pages
