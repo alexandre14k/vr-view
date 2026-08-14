@@ -52,7 +52,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
+  background: #000000;
 }
 
 .eye canvas {
@@ -125,6 +125,44 @@ body {
 #camera-btn:not(.is-on) {
   background: #000000;
   border: 1px solid var(--cam-accent);
+}
+
+#ipd-green-btn {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  background: #00ff00;
+  border: 1px solid #00ff00;
+  border-radius: 50%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 20;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#ipd-magenta-btn {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  background: #ff00ff;
+  border: 1px solid #ff00ff;
+  border-radius: 50%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 20;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #fps-counter {

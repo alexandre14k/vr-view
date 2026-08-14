@@ -1,12 +1,14 @@
 const WORKER_URL = new URL('worker.js', import.meta.url).href;
 
 class StereoCanvas {
-  constructor(canvasEl, onRender) {
+  constructor(canvasEl, side, onRender) {
     this.canvas = canvasEl;
+    this.side = side;
     this.ctx = canvasEl.getContext('2d');
     this._color = '#ffffff';
     this._source = null;
-    this.distortionScale = 0.5;
+    this.distortionScale = 0;
+    this.lensOffsetFrac = 0;
 
     this._workerSupported = typeof Worker !== 'undefined'
       && typeof OffscreenCanvas !== 'undefined'
@@ -54,14 +56,20 @@ class StereoCanvas {
 
   _applyLensClip() {
     const { width, height } = this.canvas;
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const radius = Math.min(width, height) * 0.4;
+    Stereo.Geometry.applyLensClip(
+      this.ctx, width, height,
+      this.lensOffsetFrac, this.side
+    );
+  }
 
-    this.ctx.beginPath();
-    this.ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    this.ctx.closePath();
-    this.ctx.clip();
+  _lensShiftPx() {
+    const shift = this.canvas.width * this.lensOffsetFrac;
+    return this.side === 'left' ? -shift : shift;
+  }
+
+  _clearCanvas() {
+    const { width, height } = this.canvas;
+    this.ctx.clearRect(0, 0, width, height);
   }
 
   fillSolid(color) {
@@ -89,6 +97,7 @@ class StereoCanvas {
     const { width, height } = this.canvas;
     if (width === 0 || height === 0) return;
     this.ctx.save();
+    this._clearCanvas();
     this._applyLensClip();
     this.ctx.fillStyle = color;
     this.ctx.fillRect(0, 0, width, height);
@@ -147,14 +156,17 @@ class StereoCanvas {
       const resultBitmap = await this.applyConvexDistortion(source);
       if (!resultBitmap) return;
 
-      if (resultBitmap.width !== this.canvas.width || resultBitmap.height !== this.canvas.height) {
+      if (resultBitmap.width !== this.canvas.width ||
+          resultBitmap.height !== this.canvas.height) {
         resultBitmap.close();
         this._notifyRender();
         return;
       }
 
       this.ctx.save();
+      this._clearCanvas();
       this._applyLensClip();
+      this.ctx.translate(this._lensShiftPx(), 0);
       this.ctx.drawImage(resultBitmap, 0, 0);
       this.ctx.restore();
       resultBitmap.close();
@@ -180,7 +192,9 @@ class StereoCanvas {
     const dy = (ch - dh) / 2;
 
     this.ctx.save();
+    this._clearCanvas();
     this._applyLensClip();
+    this.ctx.translate(this._lensShiftPx(), 0);
     this.ctx.drawImage(source, dx, dy, dw, dh);
     this.ctx.restore();
   }
@@ -189,7 +203,9 @@ class StereoCanvas {
     if (bitmap.width !== this.canvas.width ||
         bitmap.height !== this.canvas.height) return;
     this.ctx.save();
+    this._clearCanvas();
     this._applyLensClip();
+    this.ctx.translate(this._lensShiftPx(), 0);
     this.ctx.drawImage(bitmap, 0, 0);
     this.ctx.restore();
   }
@@ -230,9 +246,10 @@ class StereoViewController {
     this._fpsEl = fpsEl;
 
     this.left = new StereoCanvas(
-      leftCanvasEl, () => this._onRenderTick()
+      leftCanvasEl, 'left',
+      () => this._onRenderTick()
     );
-    this.right = new StereoCanvas(rightCanvasEl);
+    this.right = new StereoCanvas(rightCanvasEl, 'right');
     this.synced = true;
     this.enabled = false;
     this._stream = null;
@@ -245,6 +262,13 @@ class StereoViewController {
     this._leftEye = leftCanvasEl.closest('.eye');
     this._rightEye = rightCanvasEl.closest('.eye');
 
+    this.ipdOffsetFrac = 0;
+    this._overlayLeft = document.getElementById(
+      'lens-rect-left'
+    );
+    this._overlayRight = document.getElementById(
+      'lens-rect-right'
+    );
     this._updateCameraButton(true);
   }
 
@@ -258,6 +282,35 @@ class StereoViewController {
     const r = this._fpsRender.value.toFixed(0);
     const l = this._fpsLoop.value.toFixed(0);
     this._fpsEl.textContent = `${r} / ${l} fps`;
+  }
+
+  adjustIpd(delta) {
+    const max = Stereo.Geometry.LENS_MARGIN_FRAC;
+    const next = this.ipdOffsetFrac + delta;
+    this.ipdOffsetFrac = Math.min(
+      max, Math.max(0, next)
+    );
+    this.left.lensOffsetFrac = this.ipdOffsetFrac;
+    this.right.lensOffsetFrac = this.ipdOffsetFrac;
+    this.left.redraw();
+    this.right.redraw();
+    this._syncOverlay();
+  }
+
+  _syncOverlay() {
+    const marginPct =
+      Stereo.Geometry.LENS_MARGIN_FRAC * 100;
+    const pct = this.ipdOffsetFrac * 100;
+    if (this._overlayLeft) {
+      this._overlayLeft.setAttribute(
+        'x', `${marginPct - pct}%`
+      );
+    }
+    if (this._overlayRight) {
+      this._overlayRight.setAttribute(
+        'x', `${pct}%`
+      );
+    }
   }
 
   async startCamera() {
@@ -363,6 +416,58 @@ class StereoViewController {
 }
 
 const Stereo = {
+  Config: {
+    IPD_STEP: 0.01,
+  },
+  Geometry: {
+    LENS_WIDTH_FRAC: 0.84,
+    LENS_HEIGHT_FRAC: 0.73,
+    LENS_MARGIN_FRAC: 0.16,
+    LENS_CAP_FRAC: 0.12,
+    lensRect(width, height, offsetFrac, side) {
+      const g = Stereo.Geometry;
+      const w = width * g.LENS_WIDTH_FRAC;
+      const h = height * g.LENS_HEIGHT_FRAC;
+      const margin = width * g.LENS_MARGIN_FRAC;
+      const shift = width * offsetFrac;
+      const x = side === 'left'
+        ? margin - shift
+        : shift;
+      return {
+        x,
+        y: height * 0.135,
+        w,
+        h,
+        rx: w / 2,
+        ry: height * g.LENS_CAP_FRAC,
+      };
+    },
+    tracePath(ctx, r) {
+      const cx = r.x + r.w / 2;
+      const topCy = r.y + r.ry;
+      const botCy = r.y + r.h - r.ry;
+      ctx.moveTo(r.x, topCy);
+      ctx.ellipse(
+        cx, topCy, r.rx, r.ry, 0,
+        Math.PI, Math.PI * 2
+      );
+      ctx.lineTo(r.x + r.w, botCy);
+      ctx.ellipse(
+        cx, botCy, r.rx, r.ry, 0,
+        0, Math.PI
+      );
+      ctx.lineTo(r.x, topCy);
+    },
+    applyLensClip(ctx, width, height, offsetFrac, side) {
+      const r = Stereo.Geometry.lensRect(
+        width, height, offsetFrac, side
+      );
+      ctx.beginPath();
+      Stereo.Geometry.tracePath(ctx, r);
+      ctx.closePath();
+      ctx.clip();
+    },
+  },
   Fullscreen: {
     async enter() {
       await document.documentElement.requestFullscreen();
@@ -402,6 +507,15 @@ function bindCameraButton(cameraBtn, controller) {
   });
 }
 
+function bindIpdButtons(greenBtn, magentaBtn, controller) {
+  greenBtn.addEventListener('click', () => {
+    controller.adjustIpd(Stereo.Config.IPD_STEP);
+  });
+  magentaBtn.addEventListener('click', () => {
+    controller.adjustIpd(-Stereo.Config.IPD_STEP);
+  });
+}
+
 function bindKeyboard(controller) {
   document.addEventListener('keydown', (e) => {
     if (e.repeat) return;
@@ -430,6 +544,8 @@ function init() {
   const rightCanvas = document.getElementById('canvas-right');
   const fullscreenBtn = document.getElementById('fullscreen-btn');
   const cameraBtn = document.getElementById('camera-btn');
+  const greenBtn = document.getElementById('ipd-green-btn');
+  const magentaBtn = document.getElementById('ipd-magenta-btn');
   const fpsEl = document.getElementById('fps-counter');
 
   const controller = new StereoViewController(
@@ -439,6 +555,7 @@ function init() {
   controller.startCamera();
   bindFullscreenButton(fullscreenBtn);
   bindCameraButton(cameraBtn, controller);
+  bindIpdButtons(greenBtn, magentaBtn, controller);
   bindKeyboard(controller);
   bindFullscreenSync(fullscreenBtn, cameraBtn);
 

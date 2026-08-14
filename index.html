@@ -16,13 +16,17 @@
       <div class="eye" id="eye-left">
         <canvas id="canvas-left"></canvas>
         <svg class="lens-overlay" aria-hidden="true">
-          <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#333333" stroke-width="4" />
+          <rect id="lens-rect-left" x="16%" y="13.5%"
+            width="84%" height="73%" rx="42%" ry="12%"
+            fill="none" stroke="#333333" stroke-width="4" />
         </svg>
       </div>
       <div class="eye" id="eye-right">
         <canvas id="canvas-right"></canvas>
         <svg class="lens-overlay" aria-hidden="true">
-          <circle cx="50%" cy="50%" r="45%" fill="none" stroke="#333333" stroke-width="4" />
+          <rect id="lens-rect-right" x="0%" y="13.5%"
+            width="84%" height="73%" rx="42%" ry="12%"
+            fill="none" stroke="#333333" stroke-width="4" />
         </svg>
       </div>
     </section>
@@ -30,6 +34,10 @@
     <button id="fullscreen-btn" type="button" aria-label="Toggle fullscreen"></button>
 
     <button id="camera-btn" type="button" aria-label="Toggle camera" class="is-on"></button>
+    <button id="ipd-green-btn" type="button"
+      aria-label="Increase lens separation"></button>
+    <button id="ipd-magenta-btn" type="button"
+      aria-label="Decrease lens separation"></button>
     <div id="fps-counter" aria-hidden="true">0</div>
     <section id="rotate-message" aria-hidden="true">
       <div class="viewfinder">
