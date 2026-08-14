@@ -30,7 +30,7 @@ You can try it out with your python3 environment: <br>
 
 - bottom left green button 🟢
   - shifts lens outward
-  - 
+
 - bottom right magenta button 🟣
   - shifts lens inward
 
