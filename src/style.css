@@ -4,6 +4,7 @@
   --muted: #6b6b6b;
   --accent: #ff2e2e;
   --cam-accent: #00aaff;
+  --distort-accent: #ffff00;
   --mono: ui-monospace, "SF Mono", "Roboto Mono", "JetBrains Mono", Menlo,
     Consolas, monospace;
 }
@@ -163,6 +164,31 @@ body {
   z-index: 20;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+#distort-btn {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  background: var(--distort-accent);
+  border: 1px solid var(--distort-accent);
+  border-radius: 50%;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  z-index: 20;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#distort-btn:not(.is-on) {
+  background: #000000;
+  border: 1px solid var(--distort-accent);
 }
 
 #fps-counter {

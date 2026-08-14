@@ -7,8 +7,9 @@ class StereoCanvas {
     this.ctx = canvasEl.getContext('2d');
     this._color = '#ffffff';
     this._source = null;
-    this.distortionScale = 0;
+    this.distortionScale = Stereo.Config.DEFAULT_DISTORTION_K;
     this.lensOffsetFrac = 0;
+    this.distortEnabled = true;
 
     this._workerSupported = typeof Worker !== 'undefined'
       && typeof OffscreenCanvas !== 'undefined'
@@ -149,7 +150,7 @@ class StereoCanvas {
     const ch = this.canvas.height;
     if (cw === 0 || ch === 0) return;
 
-    if (!this._workerSupported) {
+    if (!this._workerSupported || !this.distortEnabled) {
       this._drawUndistortedFallback(source);
       return;
     }
@@ -201,6 +202,7 @@ class StereoCanvas {
     this.ctx.translate(this._lensShiftPx(), 0);
     this.ctx.drawImage(source, dx, dy, dw, dh);
     this.ctx.restore();
+    this._notifyRender();
   }
 
   blit(bitmap) {
@@ -244,7 +246,8 @@ class FpsMeter {
 }
 
 class StereoViewController {
-  constructor(leftCanvasEl, rightCanvasEl, cameraBtn, fpsEl) {
+  constructor(leftCanvasEl, rightCanvasEl, cameraBtn, fpsEl,
+      distortBtn) {
     this._fpsRender = new FpsMeter();
     this._fpsLoop = new FpsMeter();
     this._fpsEl = fpsEl;
@@ -262,6 +265,7 @@ class StereoViewController {
     this._video.muted = true;
     this._rafId = null;
     this._cameraBtn = cameraBtn;
+    this._distortBtn = distortBtn;
 
     this._leftEye = leftCanvasEl.closest('.eye');
     this._rightEye = rightCanvasEl.closest('.eye');
@@ -274,6 +278,7 @@ class StereoViewController {
       'lens-rect-right'
     );
     this._updateCameraButton(true);
+    this._updateDistortButton(true);
   }
 
   _onRenderTick() {
@@ -367,14 +372,17 @@ class StereoViewController {
     this.showSolid('#ffffff');
   }
 
-  toggleCamera() {
-    if (this.enabled) {
-      this.stopCamera();
-      this._updateCameraButton(false);
-    } else {
+  setCameraOutputEnabled(enabled) {
+    if (enabled) {
       this.startCamera();
-      this._updateCameraButton(true);
+    } else {
+      this.stopCamera();
     }
+    this._updateCameraButton(enabled);
+  }
+
+  toggleCamera() {
+    this.setCameraOutputEnabled(!this.enabled);
   }
 
   _updateCameraButton(isOn) {
@@ -395,6 +403,24 @@ class StereoViewController {
     this.left.drawFrame(this._video);
     if (this.synced) this.right.drawFrame(this._video);
     this._rafId = requestAnimationFrame(() => this._tick());
+  }
+
+  setDistortMode(enabled) {
+    this.left.distortEnabled = enabled;
+    this.right.distortEnabled = enabled;
+    this._updateDistortButton(enabled);
+    this.left.redraw();
+    if (this.synced) this.right.redraw();
+  }
+
+  toggleDistortMode() {
+    this.setDistortMode(!this.left.distortEnabled);
+  }
+
+  _updateDistortButton(isOn) {
+    if (this._distortBtn) {
+      this._distortBtn.classList.toggle('is-on', isOn);
+    }
   }
 
   async _tickSynced() {
@@ -423,6 +449,7 @@ const Stereo = {
   Config: {
     IPD_STEP: 0.01,
     RIGHT_LENS_CALIB_FRAC: 0.16,
+    DEFAULT_DISTORTION_K: 0.35,
   },
   Geometry: {
     LENS_WIDTH_FRAC: 0.84,
@@ -521,6 +548,12 @@ function bindIpdButtons(greenBtn, magentaBtn, controller) {
   });
 }
 
+function bindDistortButton(distortBtn, controller) {
+  distortBtn.addEventListener('click', () => {
+    controller.toggleDistortMode();
+  });
+}
+
 function bindKeyboard(controller) {
   document.addEventListener('keydown', (e) => {
     if (e.repeat) return;
@@ -528,6 +561,8 @@ function bindKeyboard(controller) {
       Stereo.Fullscreen.toggle();
     } else if (e.code === 'KeyC') {
       controller.toggleCamera();
+    } else if (e.code === 'KeyD') {
+      controller.toggleDistortMode();
     } else if (e.code === 'ArrowUp') {
       controller.left.distortionScale = Math.min(1.0, controller.left.distortionScale + 0.1);
       controller.right.distortionScale = controller.left.distortionScale;
@@ -552,15 +587,17 @@ function init() {
   const greenBtn = document.getElementById('ipd-green-btn');
   const magentaBtn = document.getElementById('ipd-magenta-btn');
   const fpsEl = document.getElementById('fps-counter');
+  const distortBtn = document.getElementById('distort-btn');
 
   const controller = new StereoViewController(
-    leftCanvas, rightCanvas, cameraBtn, fpsEl
+    leftCanvas, rightCanvas, cameraBtn, fpsEl, distortBtn
   );
 
   controller.startCamera();
   bindFullscreenButton(fullscreenBtn);
   bindCameraButton(cameraBtn, controller);
   bindIpdButtons(greenBtn, magentaBtn, controller);
+  bindDistortButton(distortBtn, controller);
   bindKeyboard(controller);
   bindFullscreenSync(fullscreenBtn, cameraBtn);
 
