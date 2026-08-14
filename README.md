@@ -3,7 +3,7 @@ Static webpage with virtual reality view for stereoscopic exploration. <br>
 Browse the internet with Google CardBoard, your phone and your favourite web browser.
 
 <div style="text-align: center;">
-  <img src="doc/use-webcam.png" width="700" />
+  <img src="doc/use-webcam.png" width="650" />
 </div>
 
 ## Hosted on GitHub Pages
@@ -27,6 +27,12 @@ You can try it out with your python3 environment: <br>
 - top right blue toggle button 🔵
   - default on -- camera enabled
   - off -- camera disabled
+
+- bottom left green button 🟢
+  - shifts lens outward
+  - 
+- bottom right magenta button 🟣
+  - shifts lens inward
 
 ## License
 
