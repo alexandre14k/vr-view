@@ -46,60 +46,72 @@ function bilinearSample(pixels, w, h, x, y) {
 
 // TODO: use hardware processing to improve fps
 // INFO: smooth quality requires min 15/60 fps
-function distort(bitmap, cw, ch, k) {
+function computePadding(cw, ch, k) {
+  const worstFactor = 1 + Math.min(0, k) * LENS_RSQ_EDGE;
+  const padFactor = k < 0
+    ? Math.min(MAX_PAD, 1 / Math.max(0.15, worstFactor))
+    : 1;
+  return {
+    bw: Math.max(1, Math.ceil(cw * padFactor)),
+    bh: Math.max(1, Math.ceil(ch * padFactor)),
+    padFactor,
+  };
+}
+
+function drawPadded(bitmap, cw, ch, bw, bh, padFactor) {
   const sw = bitmap.width;
   const sh = bitmap.height;
-
-  const worstFactor = 1 + Math.min(0, k) * LENS_RSQ_EDGE;
-  const padFactor = k < 0 ? Math.min(MAX_PAD, 1 / Math.max(0.15, worstFactor)) : 1;
-
-  const bw = Math.max(1, Math.ceil(cw * padFactor));
-  const bh = Math.max(1, Math.ceil(ch * padFactor));
-
   const pCtx = sizedCanvas('pad', bw, bh);
   pCtx.clearRect(0, 0, bw, bh);
-
   const scale = Math.max(cw / sw, ch / sh) * padFactor;
   const dw = sw * scale, dh = sh * scale;
   const dx = (bw - dw) / 2, dy = (bh - dh) / 2;
   pCtx.drawImage(bitmap, dx, dy, dw, dh);
   bitmap.close();
+  return pCtx.getImageData(0, 0, bw, bh).data;
+}
 
-  const { data: srcPixels } = pCtx.getImageData(0, 0, bw, bh);
-
+function prepareOutput(cw, ch) {
   const oCtx = sizedCanvas('out', cw, ch);
   if (!outImageData || outImageData.width !== cw ||
       outImageData.height !== ch) {
     outImageData = oCtx.createImageData(cw, ch);
   }
-  const output = outImageData;
-  const dstPixels = output.data;
+  return { oCtx, output: outImageData };
+}
 
+function warpPixels(srcPixels, bw, bh, padX, padY, cw, ch, k, dstPixels) {
   const halfW = cw / 2, halfH = ch / 2;
-  const R = Math.min(halfW, halfH);
-  const padX = (bw - cw) / 2, padY = (bh - ch) / 2;
-
   for (let y = 0; y < ch; y++) {
-    const ny = (y - halfH) / R;
+    const ny = (y - halfH) / halfH;
     const rowOff = y * cw;
     for (let x = 0; x < cw; x++) {
-      const nx = (x - halfW) / R;
+      const nx = (x - halfW) / halfW;
       const rSq = nx * nx + ny * ny;
       const factor = Math.max(MIN_FACTOR, 1 + k * rSq);
 
-      const sxp = (nx / factor) * R + halfW + padX;
-      const syp = (ny / factor) * R + halfH + padY;
+      const sxp = (nx / factor) * halfW + halfW + padX;
+      const syp = (ny / factor) * halfH + halfH + padY;
 
       const di = (rowOff + x) * 4;
       if (sxp >= 0 && sxp < bw && syp >= 0 && syp < bh) {
         const [r, g, b, a] = bilinearSample(srcPixels, bw, bh, sxp, syp);
-        dstPixels[di] = r; dstPixels[di + 1] = g; dstPixels[di + 2] = b; dstPixels[di + 3] = a;
+        dstPixels[di] = r; dstPixels[di + 1] = g;
+        dstPixels[di + 2] = b; dstPixels[di + 3] = a;
       } else {
-        dstPixels[di] = 0; dstPixels[di + 1] = 0; dstPixels[di + 2] = 0; dstPixels[di + 3] = 255;
+        dstPixels[di] = 0; dstPixels[di + 1] = 0;
+        dstPixels[di + 2] = 0; dstPixels[di + 3] = 255;
       }
     }
   }
+}
 
+function distort(bitmap, cw, ch, k) {
+  const { bw, bh, padFactor } = computePadding(cw, ch, k);
+  const srcPixels = drawPadded(bitmap, cw, ch, bw, bh, padFactor);
+  const { oCtx, output } = prepareOutput(cw, ch);
+  const padX = (bw - cw) / 2, padY = (bh - ch) / 2;
+  warpPixels(srcPixels, bw, bh, padX, padY, cw, ch, k, output.data);
   oCtx.putImageData(output, 0, 0);
   return oCtx.canvas.transferToImageBitmap();
 }

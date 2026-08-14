@@ -63,8 +63,12 @@ class StereoCanvas {
   }
 
   _lensShiftPx() {
-    const shift = this.canvas.width * this.lensOffsetFrac;
-    return this.side === 'left' ? -shift : shift;
+    const ipdShift = this.canvas.width * this.lensOffsetFrac;
+    const calib = this.side === 'right'
+      ? this.canvas.width * Stereo.Config.RIGHT_LENS_CALIB_FRAC
+      : 0;
+    const base = this.side === 'left' ? -ipdShift : ipdShift;
+    return base - calib;
   }
 
   _clearCanvas() {
@@ -418,6 +422,7 @@ class StereoViewController {
 const Stereo = {
   Config: {
     IPD_STEP: 0.01,
+    RIGHT_LENS_CALIB_FRAC: 0.16,
   },
   Geometry: {
     LENS_WIDTH_FRAC: 0.84,
