@@ -30,6 +30,10 @@ You can try it out with your python3 environment: <br>
 
 - bottom left green button 🟢
   - shifts lens outward
+ 
+- bottom center yellow toggle button 🟡
+  - default on -- distort
+  - off -- no distort
 
 - bottom right magenta button 🟣
   - shifts lens inward
